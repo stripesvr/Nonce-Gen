@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>quest attestation</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="card">
+    <h1>quest attestation</h1>
+    <p>type the package name, then hand the code to the headset.</p>
+
+    <input id="package" placeholder="com.AnotherAxiom.GorillaTag" autocomplete="off" spellcheck="false">
+    <button id="go">create session</button>
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <script>
+    const pkg = document.getElementById("package");
+    const go = document.getElementById("go");
+    const msg = document.getElementById("msg");
+
+    async function create() {
+      const value = pkg.value.trim();
+      if (!value) { msg.textContent = "package name required"; return; }
+
+      go.disabled = true;
+      msg.textContent = "creating…";
+
+      try {
+        const res = await fetch("/api/session", {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify({ package: value }),
+        });
+        const body = await res.json();
+        if (!res.ok) {
+          msg.textContent = body.error || "failed";
+          go.disabled = false;
+          return;
+        }
+        location.href = "/pair/" + body.session;
+      } catch (err) {
+        msg.textContent = "network: " + err.message;
+        go.disabled = false;
+      }
+    }
+
+    go.addEventListener("click", create);
+    pkg.addEventListener("keydown", (e) => { if (e.key === "Enter") create(); });
+  </script>
+</body>
+</html>

@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>pair</title>
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <div class="card">
+    <h1>session <code id="sid">—</code></h1>
+    <p>keep this page open — it updates when the token lands.</p>
+
+    <div class="state pending" id="state">waiting for the headset…</div>
+
+    <div id="detail"></div>
+
+    <div id="tokenwrap" class="hidden">
+      <code class="block" id="token"></code>
+      <button id="copy">copy token</button>
+    </div>
+
+    <div class="msg" id="msg"></div>
+  </div>
+
+  <script>
+    const session = location.pathname.split("/").filter(Boolean).pop();
+    const state = document.getElementById("state");
+    const tokenWrap = document.getElementById("tokenwrap");
+    const token = document.getElementById("token");
+    const detail = document.getElementById("detail");
+    const msg = document.getElementById("msg");
+
+    document.getElementById("sid").textContent = session;
+
+    function show(kind, text) {
+      state.className = "state " + kind;
+      state.textContent = text;
+    }
+
+    async function tick() {
+      try {
+        const res = await fetch("/api/result/" + encodeURIComponent(session));
+        const body = await res.json();
+
+        if (body.status === "verified") {
+          show("ok", "VERIFIED");
+          token.textContent = body.token || "";
+          tokenWrap.classList.remove("hidden");
+          if (body.claims) {
+            detail.innerHTML = "";
+            const pre = document.createElement("code");
+            pre.className = "block";
+            pre.textContent = JSON.stringify(body.claims, null, 2);
+            detail.appendChild(pre);
+          }
+          return;
+        }
+
+        if (body.status === "rejected") {
+          show("bad", "REJECTED · " + (body.message || "unknown"));
+          return;
+        }
+      } catch (err) {
+        msg.textContent = "poll failed: " + err.message;
+      }
+      setTimeout(tick, 1500);
+    }
+
+    document.getElementById("copy").addEventListener("click", async () => {
+      try {
+        await navigator.clipboard.writeText(token.textContent.trim());
+        msg.textContent = "copied";
+      } catch {
+        msg.textContent = "select the token and copy manually";
+      }
+    });
+
+    tick();
+  </script>
+</body>
+</html>

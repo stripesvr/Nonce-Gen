@@ -7,10 +7,19 @@ kv_namespaces = [
   { binding = "ATTEST", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
 ]
 
+# index.html / pair.html / style.css live at the repo root (GitHub Pages serves them too).
+# .assetsignore keeps python, scripts and config out of the static bundle.
+[assets]
+directory = "./"
+binding = "ASSETS"
+run_worker_first = true
+
 [vars]
 MIN_DEVICE_INTEGRITY = "Basic"
 MAX_TOKEN_AGE = "300"
 REQUIRE_STORE = "1"
+# comma-separated origins allowed to call /api/* from a browser
+ALLOWED_ORIGINS = "https://stripesvr.github.io"
 
 # npx wrangler secret put META_ACCESS_TOKEN   (OC|APP_ID|APP_SECRET)
 # never put the access token in this file, the repo, or a workflow var

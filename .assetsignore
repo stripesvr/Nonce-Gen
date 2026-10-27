@@ -1,0 +1,21 @@
+# files that must not be served as static assets by the Worker
+*.py
+*.ps1
+*.md
+*.toml
+*.json
+*.txt
+*.db
+*.ico
+*.spec
+.gitignore
+.assetsignore
+.git/**
+.github/**
+__pycache__/**
+pybuild/**
+pyspec/**
+public/**
+device/**
+web/**
+node_modules/**

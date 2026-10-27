@@ -1,41 +1,80 @@
 /**
- * quest-attest worker — the exe's job, hosted.
+ * quest-attest worker — API half. Pages live in ./public as real HTML.
  *
  *   POST /api/session        {package}        -> {session, nonce, package}
- *   GET  /api/session/:id                     -> {nonce, package}   (for the headset app)
+ *   GET  /api/session/:id                     -> {nonce, package}   (headset app)
  *   POST /api/attest         {session, token} -> {ok, message}
- *   GET  /api/result/:id                      -> {status, message, claims}
- *   GET  /pair/:id                            -> browser page, polls status
- *   GET  /healthz                             -> {ok:true}
+ *   GET  /api/result/:id                      -> {status, message, claims, token}
+ *   GET  /pair/:id                            -> public/pair.html
+ *   GET  /*                                   -> static assets
  *
- * Secrets: META_ACCESS_TOKEN (OC|APP_ID|APP_SECRET)
- * KV:      ATTEST
+ * Secret: META_ACCESS_TOKEN (OC|APP_ID|APP_SECRET)
+ * KV:     ATTEST      Assets: ASSETS (./public)
  */
 
 const GRAPH = "https://graph.oculus.com/platform_integrity/verify";
-const SESSION_TTL = 900;      // 15 min
+const SESSION_TTL = 900;
 const RESULT_TTL = 3600;
 const VALIDITY = 86400;
 
 export default {
   async fetch(request, env) {
+    const allowOrigin = pickOrigin(request, env);
+
+    if (request.method === "OPTIONS") {
+      return new Response(null, { status: 204, headers: corsHeaders(allowOrigin) });
+    }
+
+    const res = await route(request, env);
+    const out = new Response(res.body, res);
+    for (const [key, value] of Object.entries(corsHeaders(allowOrigin))) out.headers.set(key, value);
+    return out;
+  },
+};
+
+function pickOrigin(request, env) {
+  const allowed = String(env.ALLOWED_ORIGINS || "*")
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+  if (allowed.includes("*")) return "*";
+  const origin = request.headers.get("Origin") || "";
+  return allowed.includes(origin) ? origin : allowed[0];
+}
+
+function corsHeaders(origin) {
+  return {
+    "access-control-allow-origin": origin,
+    "access-control-allow-methods": "GET,POST,OPTIONS",
+    "access-control-allow-headers": "content-type",
+    "access-control-max-age": "86400",
+    vary: "Origin",
+  };
+}
+
+async function route(request, env) {
     const url = new URL(request.url);
     const path = url.pathname;
 
     try {
       if (path === "/healthz") return json({ ok: true });
-      if (path === "/" && request.method === "GET") return home(env);
+
       if (path === "/api/session" && request.method === "POST") return createSession(request, env);
       if (path.startsWith("/api/session/") && request.method === "GET") return readSession(path.split("/").pop(), env);
       if (path === "/api/attest" && request.method === "POST") return attest(request, env);
       if (path.startsWith("/api/result/") && request.method === "GET") return readResult(path.split("/").pop(), env);
-      if (path.startsWith("/pair/") && request.method === "GET") return pairPage(path.split("/").pop());
-      return new Response("not found", { status: 404 });
+      if (path.startsWith("/api/")) return json({ error: "not found" }, 404);
+
+      if (path.startsWith("/pair/")) {
+        const page = new URL("/pair.html", url).toString();
+        return env.ASSETS.fetch(new Request(page, request));
+      }
+
+      return env.ASSETS.fetch(request);
     } catch (err) {
       return json({ error: String(err && err.message ? err.message : err) }, 500);
     }
-  },
-};
+}
 
 /* ------------------------------------------------------------- sessions */
 
@@ -213,90 +252,3 @@ function json(obj, status = 200) {
     headers: { "content-type": "application/json; charset=utf-8", "cache-control": "no-store" },
   });
 }
-
-/* ----------------------------------------------------------------- html */
-
-function home(env) {
-  const page = `<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>attestation</title>
-${STYLE}</head><body><div class="card">
-<h1>attestation</h1>
-<p>package name, then hand the code to the headset.</p>
-<input id="p" placeholder="com.AnotherAxiom.GorillaTag" autocomplete="off">
-<button onclick="go()">create session</button>
-<div class="msg" id="m"></div>
-</div><script>
-async function go(){
-  const p = document.getElementById('p').value.trim();
-  const m = document.getElementById('m');
-  m.textContent = 'creating…';
-  const r = await fetch('/api/session', {method:'POST',headers:{'content-type':'application/json'},
-    body: JSON.stringify({package:p})});
-  const j = await r.json();
-  if (!r.ok) { m.textContent = j.error || 'failed'; return; }
-  location.href = '/pair/' + j.session;
-}
-document.getElementById('p').addEventListener('keydown', e => { if (e.key === 'Enter') go(); });
-</script></body></html>`;
-  return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
-}
-
-function pairPage(session) {
-  const page = `<!doctype html><html><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width,initial-scale=1"><title>pair ${session}</title>
-${STYLE}</head><body><div class="card">
-<h1>session <code>${session}</code></h1>
-<p>keep this open — it updates when the token lands.</p>
-<div id="state" class="state pending">waiting for the headset…</div>
-<div id="claims"></div>
-<div id="tokenwrap" style="display:none">
-  <code id="token"></code>
-  <button onclick="copyToken()">copy token</button>
-</div>
-</div><script>
-const id = ${JSON.stringify(session)};
-let last = 'pending';
-async function tick(){
-  try {
-    const r = await fetch('/api/result/' + id);
-    const j = await r.json();
-    if (j.status === 'verified') {
-      document.getElementById('state').className = 'state ok';
-      document.getElementById('state').textContent = 'VERIFIED';
-      document.getElementById('tokenwrap').style.display = 'block';
-      document.getElementById('token').textContent = j.token || '';
-      document.getElementById('claims').textContent = JSON.stringify(j.claims, null, 2);
-      return;
-    }
-    if (j.status === 'rejected') {
-      document.getElementById('state').className = 'state bad';
-      document.getElementById('state').textContent = 'REJECTED · ' + j.message;
-      return;
-    }
-  } catch (e) {}
-  setTimeout(tick, 1500);
-}
-tick();
-function copyToken(){ navigator.clipboard.writeText(document.getElementById('token').textContent.trim()); }
-</script></body></html>`;
-  return new Response(page, { headers: { "content-type": "text/html; charset=utf-8" } });
-}
-
-const STYLE = `<style>
- body{margin:0;background:#313338;color:#f2f3f5;font:16px/1.5 'Segoe UI',system-ui,sans-serif;
-      display:flex;min-height:100vh;align-items:center;justify-content:center;padding:24px}
- .card{background:#2b2d31;border-radius:16px;padding:28px;max-width:720px;width:100%}
- h1{font-size:22px;margin:0 0 6px} h1 code{font-size:16px;color:#949ba4}
- p{color:#949ba4;margin:0 0 18px;font-size:14px}
- input{width:100%;padding:14px;border:0;border-radius:10px;background:#383a40;color:#f2f3f5;
-       font:14px Consolas,monospace;box-sizing:border-box}
- button{margin-top:14px;width:100%;padding:16px;border:0;border-radius:10px;background:#5865f2;
-        color:#fff;font:600 16px 'Segoe UI',sans-serif;cursor:pointer}
- button:active{background:#4752c4}
- .msg{color:#f0b232;font-size:13px;margin-top:12px;min-height:18px}
- .state{padding:14px;border-radius:10px;background:#383a40;font-weight:600;margin-bottom:14px}
- .state.ok{background:#1f3d2c;color:#3ddc84} .state.bad{background:#47232a;color:#ff5c6c}
- .state.pending{color:#949ba4}
- code{display:block;background:#1e1f22;padding:14px;border-radius:10px;font:12px/1.5 Consolas,monospace;
-      word-break:break-all;max-height:200px;overflow:auto;margin-top:12px;white-space:pre-wrap}
-</style>`;
