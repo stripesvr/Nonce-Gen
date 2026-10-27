@@ -1,0 +1,15 @@
+{
+  "name": "quest-attest",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Meta Quest attestation: nonce, signed token, verification gate",
+  "type": "module",
+  "scripts": {
+    "dev": "wrangler dev",
+    "deploy": "wrangler deploy",
+    "check": "node --check web/worker.js"
+  },
+  "devDependencies": {
+    "wrangler": "^4.0.0"
+  }
+}

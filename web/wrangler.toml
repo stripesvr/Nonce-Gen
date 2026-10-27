@@ -1,0 +1,15 @@
+# Convenience config if you run wrangler from this folder.
+# The canonical config is ../wrangler.toml (main = "web/worker.js").
+
+name = "quest-attest"
+main = "worker.js"
+compatibility_date = "2026-01-01"
+
+kv_namespaces = [
+  { binding = "ATTEST", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+]
+
+[vars]
+MIN_DEVICE_INTEGRITY = "Basic"
+MAX_TOKEN_AGE = "300"
+REQUIRE_STORE = "1"

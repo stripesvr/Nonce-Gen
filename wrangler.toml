@@ -1,0 +1,16 @@
+name = "quest-attest"
+main = "web/worker.js"
+compatibility_date = "2026-01-01"
+
+# npx wrangler kv namespace create ATTEST  -> paste the id below
+kv_namespaces = [
+  { binding = "ATTEST", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+]
+
+[vars]
+MIN_DEVICE_INTEGRITY = "Basic"
+MAX_TOKEN_AGE = "300"
+REQUIRE_STORE = "1"
+
+# npx wrangler secret put META_ACCESS_TOKEN   (OC|APP_ID|APP_SECRET)
+# never put the access token in this file, the repo, or a workflow var
