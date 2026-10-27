@@ -4,7 +4,7 @@ compatibility_date = "2026-01-01"
 
 # npx wrangler kv namespace create ATTEST  -> paste the id below
 kv_namespaces = [
-  { binding = "ATTEST", id = "REPLACE_WITH_KV_NAMESPACE_ID" }
+  { binding = "ATTEST", id = "150b66d29f9f4476905917e8f3c5e93d" }
 ]
 
 # index.html / pair.html / style.css live at the repo root (GitHub Pages serves them too).
